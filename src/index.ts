@@ -60,7 +60,7 @@ new Elysia()
             }
         );
     })
-    .get("/ping", () => "pong")
+    .get("/login", () => Bun.file("public/telegram.html"))
     .get(
         "/auth/telegram",
         // parameters: id, first_name, last_name, username, photo_url, auth_date and hash;
