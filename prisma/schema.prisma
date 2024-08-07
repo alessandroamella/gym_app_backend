@@ -23,10 +23,24 @@ model User {
 }
 
 enum WorkoutType {
-  GYM_WORKOUT
-  HOME_WORKOUT
-  SPORTS_ACTIVITY
+  GYM
+  CARDIO
+  YOGA
+  SPORT
   OTHER
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+model Media {
+  id         Int       @id @default(autoincrement())
+  path       String
+  type       MediaType
+  gymEntries GymEntry? @relation(fields: [gymEntryId], references: [id])
+  gymEntryId Int?
 }
 
 model GymEntry {
@@ -36,7 +50,7 @@ model GymEntry {
   points Int
   type   WorkoutType
   notes  String?
-  media  String[]    @default([])
+  media  Media[]
   user   User        @relation(fields: [userId], references: [id])
 }
 
