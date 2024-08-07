@@ -128,6 +128,14 @@ new Elysia()
                     )}`
                 );
             }
+
+            if (!user.profilePic && query.photo_url) {
+                await db.user.update({
+                    where: { id: user.id },
+                    data: { profilePic: query.photo_url }
+                });
+            }
+
             const token = await auth.createToken(user.id, JWT_SECRET);
             return { token };
         },
@@ -152,25 +160,24 @@ new Elysia()
         app =>
             app
                 .get("/me", async ({ headers: { authorization }, env: { JWT_SECRET } }) => {
-                    return auth.getUserFromHeader(authorization, JWT_SECRET);
+                    const { user } = await auth.getUserFromHeader(authorization, JWT_SECRET);
+                    return user;
                 })
                 .post(
-                    "/entry",
+                    "/gym-entry",
                     async ({
                         headers: { authorization },
                         body: { date, points, type },
                         env: { JWT_SECRET }
                     }) => {
-                        const user = await auth.getUserFromHeader(authorization, JWT_SECRET);
+                        const { id } = await auth.getUserFromHeader(authorization, JWT_SECRET);
                         return db.gymEntry.create({
                             data: {
-                                // set to midnight
+                                // start of the day
                                 date: moment(date).startOf("day").toDate(),
                                 points,
                                 user: {
-                                    connect: {
-                                        id: user.id
-                                    }
+                                    connect: { id }
                                 },
                                 type
                             }
@@ -183,6 +190,31 @@ new Elysia()
                                 Object.values(WorkoutType).map(value => t.Literal(value))
                             ),
                             points: t.Integer({ minimum: 1 })
+                        })
+                    }
+                )
+                .post(
+                    "/weight-entry",
+                    async ({
+                        headers: { authorization },
+                        body: { date, weight },
+                        env: { JWT_SECRET }
+                    }) => {
+                        const { id } = await auth.getUserFromHeader(authorization, JWT_SECRET);
+                        return db.weightEntry.create({
+                            data: {
+                                date: moment(date).startOf("day").toDate(),
+                                weight,
+                                user: {
+                                    connect: { id }
+                                }
+                            }
+                        });
+                    },
+                    {
+                        body: t.Object({
+                            date: t.Date(),
+                            weight: t.Number({ minimum: 0 })
                         })
                     }
                 )

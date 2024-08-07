@@ -14,11 +14,12 @@ datasource db {
 }
 
 model User {
-  id         Int        @id @default(autoincrement())
-  telegramId String     @unique
-  username   String
-  profilePic String?
-  gymEntries GymEntry[]
+  id            Int           @id @default(autoincrement())
+  telegramId    String        @unique
+  username      String
+  profilePic    String?
+  gymEntries    GymEntry[]
+  weightEntries WeightEntry[]
 }
 
 enum WorkoutType {
@@ -37,4 +38,12 @@ model GymEntry {
   notes  String?
   media  String[]    @default([])
   user   User        @relation(fields: [userId], references: [id])
+}
+
+model WeightEntry {
+  id     Int      @id @default(autoincrement())
+  userId Int
+  date   DateTime
+  weight Float
+  user   User     @relation(fields: [userId], references: [id])
 }

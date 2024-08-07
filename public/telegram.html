@@ -4,8 +4,25 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Telegram Login</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+                margin: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                text-overflow: ellipsis;
+            }
+            * {
+                max-width: 100%;
+                box-sizing: border-box;
+            }
+        </style>
     </head>
     <body>
+        <h1>Telegram Login</h1>
         <script
             async
             src="https://telegram.org/js/telegram-widget.js?22"
@@ -13,6 +30,7 @@
             data-size="large"
             data-onauth="onTelegramAuth(user)"
         ></script>
+        <div id="logs"></div>
         <script type="text/javascript">
             // get redirect_uri from query string
             const urlParams = new URLSearchParams(window.location.search);
@@ -21,6 +39,16 @@
             if (!redirect_uri) {
                 window.alert("redirect_uri is required");
                 window.close();
+            }
+
+            function log(message) {
+                console.log(message);
+                const p = document.createElement("p");
+                // make p text ellipsis and overflow hidden
+                p.style.textOverflow = "ellipsis";
+                p.style.overflow = "auto";
+                p.innerHTML = message;
+                document.querySelector("#logs").appendChild(p);
             }
 
             async function onTelegramAuth(user) {
@@ -33,15 +61,18 @@
                         authTokenUrl.searchParams.append(key, user[key]);
                     });
 
-                    document.write("<h1>Redirecting...</h1>");
-                    document.write(JSON.stringify(user));
+                    log("<h1>Redirecting...</h1>");
+                    log(`<pre><code>${JSON.stringify(user, null, 2)}</code></pre>`);
 
                     // fetch the redirect_uri with user data
                     const response = await fetch(authTokenUrl);
                     const json = await response.json();
 
                     // write the response to the document
-                    document.write(JSON.stringify(json));
+                    log("Got token:");
+                    log(`<pre><code>${json.token}</code></pre>`);
+
+                    log("<br /><p><strong>Please accept the request to continue...</strong></p>");
 
                     // form new link with redirect_uri and token as query string
                     const redirectUrl = new URL(redirect_uri, window.location.href);
@@ -50,7 +81,7 @@
                     // redirect to the redirect_uri with token
                     window.location.href = redirectUrl;
                 } catch (err) {
-                    document.write(
+                    log(
                         `<h1 style="margin-bottom: 0">ERROR!!</h1><p style="color: red">${err}<p><br /><a href="${redirect_uri}">Continue to ${redirect_uri}</a>`
                     );
                 }

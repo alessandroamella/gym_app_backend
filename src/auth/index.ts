@@ -23,19 +23,37 @@ const signAsync = (payload: object, secret: string): Promise<string> => {
 };
 
 class Auth {
-    async getUserFromHeader(authorization: string, secret: string): Promise<User> {
+    async getUserFromHeader(authorization: string, secret: string) {
         const token = authorization.split("Bearer ")[1];
         let id: number;
         try {
             const val = await verifyAsync<{ id: number }>(token, secret);
             id = val.id;
         } catch (e) {
+            console.log({ e: (e as Error).message, authorization, token, secret });
             throw new ValidationError("auth.invalid_token", t.Object({}), authorization);
         }
 
         const user = await db.user.findFirst({
             where: {
                 id
+            },
+            select: {
+                username: true,
+                profilePic: true,
+                gymEntries: {
+                    select: {
+                        date: true,
+                        points: true,
+                        type: true
+                    }
+                },
+                weightEntries: {
+                    select: {
+                        date: true,
+                        weight: true
+                    }
+                }
             }
         });
 
@@ -43,7 +61,7 @@ class Auth {
             throw new ValidationError("auth.user_not_found", t.Object({}), authorization);
         }
 
-        return user;
+        return { id, user };
     }
 
     async createToken(userId: number, secret: string): Promise<string> {
