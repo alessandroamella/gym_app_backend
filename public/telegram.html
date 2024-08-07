@@ -14,15 +14,46 @@
             data-onauth="onTelegramAuth(user)"
         ></script>
         <script type="text/javascript">
-            function onTelegramAuth(user) {
+            // get redirect_uri from query string
+            const urlParams = new URLSearchParams(window.location.search);
+            const redirect_uri = urlParams.get("redirect_uri");
+
+            if (!redirect_uri) {
+                window.alert("redirect_uri is required");
+                window.close();
+            }
+
+            async function onTelegramAuth(user) {
                 window.alert(`Logged in as: ${user.first_name}`);
 
-                // get redirect_url from query string
-                const urlParams = new URLSearchParams(window.location.search);
-                const redirect_url = urlParams.get("redirect_url");
+                // append user data to the redirect_uri
+                try {
+                    const authTokenUrl = new URL("/auth/telegram", window.location.href);
+                    Object.keys(user).forEach(key => {
+                        authTokenUrl.searchParams.append(key, user[key]);
+                    });
 
-                // redirect to the redirect_url
-                window.location.href = redirect_url;
+                    document.write("<h1>Redirecting...</h1>");
+                    document.write(JSON.stringify(user));
+
+                    // fetch the redirect_uri with user data
+                    const response = await fetch(authTokenUrl);
+                    const json = await response.json();
+
+                    // write the response to the document
+                    document.write(JSON.stringify(json));
+
+                    // form new link with redirect_uri and token as query string
+                    const redirectUrl = new URL(redirect_uri, window.location.href);
+                    redirectUrl.searchParams.append("token", json.token);
+
+                    // redirect to the redirect_uri with token
+                    window.location.href = redirectUrl;
+                } catch (err) {
+                    document.write(
+                        `<h1 style="margin-bottom: 0">ERROR!!</h1><p style="color: red">${err}<p><br /><a href="${redirect_uri}">Continue to ${redirect_uri}</a>`
+                    );
+                }
             }
         </script>
     </body>

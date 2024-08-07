@@ -5,6 +5,7 @@ import { db } from "./db";
 import moment from "moment";
 import { auth } from "./auth";
 import crypto from "crypto";
+import { WorkoutType } from "@prisma/client";
 
 new Elysia()
     .use(
@@ -65,6 +66,8 @@ new Elysia()
         "/auth/telegram",
         // parameters: id, first_name, last_name, username, photo_url, auth_date and hash;
         async ({ query, env: { JWT_SECRET, TELEGRAM_BOT_TOKEN } }) => {
+            console.debug("Telegram auth query", query);
+
             // parse query.auth_date with moment, which is Unix
             // timestamp, to ensure it is not older than 24 hours
             // and not in the future
@@ -118,6 +121,12 @@ new Elysia()
             if (!user) {
                 console.warn(`User with Telegram id ${query.id} not found in /auth/telegram`);
                 throw new ValidationError("auth.user_not_found", t.Object({}), query.id);
+            } else {
+                console.debug(
+                    `User with Telegram id ${query.id} found in /auth/telegram: ${JSON.stringify(
+                        user
+                    )}`
+                );
             }
             const token = await auth.createToken(user.id, JWT_SECRET);
             return { token };
@@ -149,7 +158,7 @@ new Elysia()
                     "/entry",
                     async ({
                         headers: { authorization },
-                        body: { date, points },
+                        body: { date, points, type },
                         env: { JWT_SECRET }
                     }) => {
                         const user = await auth.getUserFromHeader(authorization, JWT_SECRET);
@@ -162,12 +171,19 @@ new Elysia()
                                     connect: {
                                         id: user.id
                                     }
-                                }
+                                },
+                                type
                             }
                         });
                     },
                     {
-                        body: t.Object({ date: t.Date(), points: t.Integer({ minimum: 1 }) })
+                        body: t.Object({
+                            date: t.Date(),
+                            type: t.Union(
+                                Object.values(WorkoutType).map(value => t.Literal(value))
+                            ),
+                            points: t.Integer({ minimum: 1 })
+                        })
                     }
                 )
     )

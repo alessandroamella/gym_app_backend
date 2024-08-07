@@ -9,21 +9,32 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
   id         Int        @id @default(autoincrement())
   telegramId String     @unique
+  username   String
+  profilePic String?
   gymEntries GymEntry[]
 }
 
+enum WorkoutType {
+  GYM_WORKOUT
+  HOME_WORKOUT
+  SPORTS_ACTIVITY
+  OTHER
+}
+
 model GymEntry {
+  id     Int         @id @default(autoincrement())
   userId Int
   date   DateTime
   points Int
-  user   User     @relation(fields: [userId], references: [id])
-
-  @@id([userId, date])
+  type   WorkoutType
+  notes  String?
+  media  String[]    @default([])
+  user   User        @relation(fields: [userId], references: [id])
 }
