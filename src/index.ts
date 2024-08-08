@@ -5,12 +5,17 @@ import { db } from './db';
 import moment from 'moment';
 import { auth } from './auth';
 import crypto from 'crypto';
-import { Media, MediaType, Prisma, WorkoutType } from '@prisma/client';
+import { MediaType, Prisma, WorkoutType } from '@prisma/client';
 import randomstring from 'randomstring';
 import { config } from './config';
-import { extname } from 'node:path';
+import { extname, join } from 'node:path';
+import { resampleArray } from './helpers/resample';
+import { decode } from 'node-base64-image';
+import './telegram';
+import { staticPlugin } from '@elysiajs/static';
 
 new Elysia()
+  .use(staticPlugin({ assets: 'public' }))
   .use(
     env({
       JWT_SECRET: t.String({
@@ -64,7 +69,7 @@ new Elysia()
       },
     );
   })
-  .get('/login', () => Bun.file('public/telegram.html'))
+  .get('/login', () => Bun.file('login/telegram.html'))
   .get(
     '/auth/telegram',
     // parameters: id, first_name, last_name, username, photo_url, auth_date and hash;
@@ -182,12 +187,103 @@ new Elysia()
       app
         .get(
           '/me',
-          async ({ headers: { authorization }, env: { JWT_SECRET } }) => {
+          async ({
+            headers: { authorization },
+            env: { JWT_SECRET },
+            query: { resample },
+          }) => {
             const { user } = await auth.getUserFromHeader(
               authorization,
               JWT_SECRET,
             );
-            return user;
+            const weighted = resampleArray(
+              user.weightEntries.map((w) => w.weight),
+              resample,
+            );
+            return { ...user, weightEntriesWeighted: weighted };
+          },
+          {
+            query: t.Object({
+              resample: t.Integer({ minimum: 1, default: 10 }),
+            }),
+          },
+        )
+        .patch(
+          '/me',
+          async ({
+            headers: { authorization },
+            body: { username, profilePic },
+            env: { JWT_SECRET },
+          }) => {
+            const { id } = await auth.getUserFromHeader(
+              authorization,
+              JWT_SECRET,
+            );
+
+            if (profilePic) {
+              try {
+                await decode(profilePic, {
+                  ext: 'png',
+                  fname: config.uploadsBasePath + 'profilePic_' + id,
+                });
+                profilePic = join(
+                  config.uploadsPublicPath,
+                  'profilePic_' + id + '.png',
+                );
+              } catch (err) {
+                console.error('Error decoding profile pic:', err);
+                throw new ValidationError(
+                  'user.profile_pic_decoding_error',
+                  t.Object({}),
+                  profilePic,
+                );
+              }
+            }
+            console.debug('Updating user with params', {
+              id,
+              username,
+              profilePic,
+            });
+            return db.user.update({
+              where: { id },
+              data: {
+                username,
+                profilePic,
+              },
+            });
+          },
+          {
+            body: t.Object({
+              username: t.Optional(t.String({ minLength: 1 })),
+              profilePic: t.Optional(t.String({ minLength: 1 })),
+            }),
+          },
+        )
+        // to view everyone gym entries
+        .get(
+          '/stats',
+          async ({ query: { resample } }) => {
+            const users = await db.user.findMany({
+              include: {
+                gymEntries: {
+                  orderBy: { date: 'desc' },
+                  take: 10,
+                },
+              },
+            });
+            const weighted = users.map((user) => ({
+              ...user,
+              gymEntries: resampleArray(
+                user.gymEntries.map((g) => g.points),
+                resample,
+              ),
+            }));
+            return weighted;
+          },
+          {
+            query: t.Object({
+              resample: t.Integer({ minimum: 1, default: 10 }),
+            }),
           },
         )
         .post(
@@ -201,7 +297,7 @@ new Elysia()
               authorization,
               JWT_SECRET,
             );
-            const files: Prisma.MediaCreateManyGymEntriesInput[] = [];
+            const files: Prisma.MediaCreateManyGymEntryInput[] = [];
             if (media) {
               for (const file of media) {
                 // use Bun.file to save the file in /uploads
@@ -231,7 +327,7 @@ new Elysia()
                 }
 
                 const path =
-                  'uploads/' +
+                  config.uploadsBasePath +
                   moment().format('YYYYMMDDHHmmss') +
                   '_' +
                   randomstring.generate({
@@ -289,7 +385,7 @@ new Elysia()
               authorization,
               JWT_SECRET,
             );
-            return db.weightEntry.create({
+            await db.weightEntry.create({
               data: {
                 date: moment(date).startOf('day').toDate(),
                 weight,
@@ -298,6 +394,11 @@ new Elysia()
                 },
               },
             });
+            const { user } = await auth.getUserFromHeader(
+              authorization,
+              JWT_SECRET,
+            );
+            return user;
           },
           {
             body: t.Object({

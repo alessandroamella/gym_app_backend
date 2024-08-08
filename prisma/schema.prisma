@@ -13,13 +13,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  USER
+  ADMIN
+  OWNER
+}
+
 model User {
   id            Int           @id @default(autoincrement())
   telegramId    String        @unique
   username      String
+  role          UserRole      @default(USER)
   profilePic    String?
   gymEntries    GymEntry[]
   weightEntries WeightEntry[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 }
 
 enum WorkoutType {
@@ -33,31 +42,39 @@ enum WorkoutType {
 enum MediaType {
   IMAGE
   VIDEO
+  AUDIO
 }
 
 model Media {
   id         Int       @id @default(autoincrement())
   path       String
   type       MediaType
-  gymEntries GymEntry? @relation(fields: [gymEntryId], references: [id])
-  gymEntryId Int?
+  gymEntry   GymEntry  @relation(fields: [gymEntryId], references: [id])
+  gymEntryId Int
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model GymEntry {
-  id     Int         @id @default(autoincrement())
-  userId Int
-  date   DateTime
-  points Int
-  type   WorkoutType
-  notes  String?
-  media  Media[]
-  user   User        @relation(fields: [userId], references: [id])
+  id        Int         @id @default(autoincrement())
+  userId    Int
+  date      DateTime
+  points    Int
+  type      WorkoutType
+  notes     String?
+  media     Media[]
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 }
 
 model WeightEntry {
-  id     Int      @id @default(autoincrement())
-  userId Int
-  date   DateTime
-  weight Float
-  user   User     @relation(fields: [userId], references: [id])
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  date      DateTime
+  weight    Float
+  notes     String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

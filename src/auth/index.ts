@@ -64,14 +64,25 @@ class Auth {
             date: true,
             points: true,
             type: true,
+            updatedAt: true,
+            notes: true,
+            media: {
+              select: {
+                type: true,
+                path: true,
+              },
+            },
           },
         },
         weightEntries: {
           select: {
             date: true,
             weight: true,
+            updatedAt: true,
+            notes: true,
           },
         },
+        createdAt: true,
       },
     });
 

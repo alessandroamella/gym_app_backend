@@ -6,4 +6,6 @@ export const config = Object.freeze({
     'video/mp4',
     'video/quicktime',
   ],
+  uploadsBasePath: 'public/uploads/',
+  uploadsPublicPath: 'https://gym.bitrey.it/public/uploads/',
 });
