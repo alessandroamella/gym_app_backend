@@ -297,6 +297,22 @@ new Elysia()
               authorization,
               JWT_SECRET,
             );
+            const existing = await db.gymEntry.findFirst({
+              where: {
+                userId: id,
+                date: {
+                  gte: moment(date).startOf('day').toDate(),
+                  lt: moment(date).endOf('day').toDate(),
+                },
+              },
+            });
+            if (existing) {
+              throw new ValidationError(
+                'gym_entry.already_exists',
+                t.Object({}),
+                existing,
+              );
+            }
             const files: Prisma.MediaCreateManyGymEntryInput[] = [];
             if (media) {
               for (const file of media) {
@@ -346,7 +362,7 @@ new Elysia()
                 });
               }
             }
-            return db.gymEntry.create({
+            await db.gymEntry.create({
               data: {
                 // start of the day
                 date: moment(date).startOf('day').toDate(),
@@ -362,6 +378,11 @@ new Elysia()
                 },
               },
             });
+            const { user } = await auth.getUserFromHeader(
+              authorization,
+              JWT_SECRET,
+            );
+            return user;
           },
           {
             body: t.Object({

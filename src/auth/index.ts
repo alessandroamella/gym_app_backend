@@ -73,6 +73,9 @@ class Auth {
               },
             },
           },
+          orderBy: {
+            date: 'desc',
+          },
         },
         weightEntries: {
           select: {
