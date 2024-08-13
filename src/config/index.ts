@@ -8,4 +8,6 @@ export const config = Object.freeze({
   ],
   uploadsBasePath: 'public/uploads/',
   uploadsPublicPath: 'https://gym.bitrey.it/public/uploads/',
+  maxWorkoutHoursPerDay: 18, // you can't possibly workout for > 18 hours a day
+  minutesPerPoint: 45,
 });

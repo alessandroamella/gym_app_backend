@@ -8,11 +8,12 @@ import crypto from 'crypto';
 import { MediaType, Prisma, WorkoutType } from '@prisma/client';
 import randomstring from 'randomstring';
 import { config } from './config';
-import { extname, join } from 'node:path';
+import { extname, join, parse } from 'node:path';
 import { resampleArray } from './helpers/resample';
 import { decode } from 'node-base64-image';
-import './telegram';
 import { staticPlugin } from '@elysiajs/static';
+import { launchBot } from './telegram';
+import { unlink, exists, readdir } from 'node:fs/promises';
 
 new Elysia()
   .use(staticPlugin({ assets: 'public' }))
@@ -187,25 +188,12 @@ new Elysia()
       app
         .get(
           '/me',
-          async ({
-            headers: { authorization },
-            env: { JWT_SECRET },
-            query: { resample },
-          }) => {
+          async ({ headers: { authorization }, env: { JWT_SECRET } }) => {
             const { user } = await auth.getUserFromHeader(
               authorization,
               JWT_SECRET,
             );
-            const weighted = resampleArray(
-              user.weightEntries.map((w) => w.weight),
-              resample,
-            );
-            return { ...user, weightEntriesWeighted: weighted };
-          },
-          {
-            query: t.Object({
-              resample: t.Integer({ minimum: 1, default: 10 }),
-            }),
+            return user;
           },
         )
         .patch(
@@ -215,21 +203,25 @@ new Elysia()
             body: { username, profilePic },
             env: { JWT_SECRET },
           }) => {
-            const { id } = await auth.getUserFromHeader(
+            const { id, user } = await auth.getUserFromHeader(
               authorization,
               JWT_SECRET,
             );
 
             if (profilePic) {
+              const name =
+                'pp_' +
+                randomstring.generate({
+                  length: 16,
+                  charset: 'alphanumeric',
+                }) +
+                '.png';
               try {
                 await decode(profilePic, {
                   ext: 'png',
-                  fname: config.uploadsBasePath + 'profilePic_' + id,
+                  fname: config.uploadsBasePath + parse(name).name,
                 });
-                profilePic = join(
-                  config.uploadsPublicPath,
-                  'profilePic_' + id + '.png',
-                );
+                profilePic = config.uploadsPublicPath + name;
               } catch (err) {
                 console.error('Error decoding profile pic:', err);
                 throw new ValidationError(
@@ -244,6 +236,29 @@ new Elysia()
               username,
               profilePic,
             });
+            if (profilePic && user.profilePic) {
+              try {
+                const path = join(
+                  process.cwd(),
+                  user.profilePic.replace(
+                    config.uploadsPublicPath,
+                    config.uploadsBasePath,
+                  ),
+                );
+                if (!(await exists(path))) {
+                  throw new Error('Profile pic not found: ' + path);
+                }
+                await unlink(path);
+                console.debug(
+                  'Deleted old profile pic URL:',
+                  user.profilePic,
+                  'path:',
+                  path,
+                );
+              } catch (err) {
+                console.error('Error deleting old profile pic:', err);
+              }
+            }
             return db.user.update({
               where: { id },
               data: {
@@ -286,13 +301,61 @@ new Elysia()
             }),
           },
         )
+        .get(
+          'gym-entries',
+          async ({ query: { from, to } }) => {
+            const workouts = await db.gymEntry.findMany({
+              where: {
+                date: {
+                  gte: from ? moment(from).toDate() : undefined,
+                  lte: to ? moment(to).toDate() : undefined,
+                },
+              },
+              select: {
+                id: true,
+                date: true,
+                points: true,
+                types: true,
+                media: {
+                  select: {
+                    path: true,
+                  },
+                },
+                user: {
+                  select: {
+                    id: true,
+                    username: true,
+                    profilePic: true,
+                  },
+                },
+              },
+            });
+            return { workouts };
+          },
+          {
+            query: t.Object({
+              from: t.Optional(t.Date()),
+              to: t.Optional(t.Date()),
+            }),
+          },
+        )
         .post(
           '/gym-entry',
           async ({
             headers: { authorization },
-            body: { date, points, type, media },
+            body: { date, points, types, media },
             env: { JWT_SECRET },
           }) => {
+            const maxPoints1Day =
+              (config.maxWorkoutHoursPerDay * 60) / config.minutesPerPoint;
+            if (points > maxPoints1Day) {
+              throw new ValidationError(
+                'gym_entry.points_exceed_max',
+                t.Object({}),
+                points,
+              );
+            }
+
             const { id } = await auth.getUserFromHeader(
               authorization,
               JWT_SECRET,
@@ -370,7 +433,7 @@ new Elysia()
                 user: {
                   connect: { id },
                 },
-                type,
+                types,
                 media: {
                   createMany: {
                     data: files,
@@ -387,11 +450,41 @@ new Elysia()
           {
             body: t.Object({
               date: t.Date(),
-              type: t.Union(
-                Object.values(WorkoutType).map((value) => t.Literal(value)),
-              ),
+              // must contain values in WorkoutType enum
+              types: t.Array(t.Enum(WorkoutType), { minItems: 1 }),
               points: t.Integer({ minimum: 1 }),
               media: t.Optional(t.Files()),
+            }),
+          },
+        )
+        .delete(
+          '/gym-entry/:id',
+          async ({ params: { id }, headers: { authorization }, env }) => {
+            const { id: userId } = await auth.getUserFromHeader(
+              authorization,
+              env.JWT_SECRET,
+            );
+            const entry = await db.gymEntry.findUnique({
+              where: { id: Number(id), userId },
+              select: { media: { select: { path: true } } },
+            });
+            if (!entry) {
+              throw new ValidationError(
+                'gym_entry.not_found',
+                t.Object({}),
+                id,
+              );
+            }
+            for (const media of entry.media.map((e) => e.path)) {
+              console.debug('Deleting media file', media);
+              await unlink(media);
+            }
+            await db.gymEntry.delete({ where: { id: Number(id) } });
+            return { success: true };
+          },
+          {
+            params: t.Object({
+              id: t.String(),
             }),
           },
         )
@@ -427,6 +520,33 @@ new Elysia()
               weight: t.Number({ minimum: 0 }),
             }),
           },
+        )
+        .delete(
+          '/weight-entry/:id',
+          async ({ params: { id }, headers: { authorization }, env }) => {
+            const { id: userId } = await auth.getUserFromHeader(
+              authorization,
+              env.JWT_SECRET,
+            );
+            const entry = await db.weightEntry.findUnique({
+              where: { id: Number(id), userId },
+              select: { userId: true },
+            });
+            if (!entry) {
+              throw new ValidationError(
+                'weight_entry.not_found',
+                t.Object({}),
+                id,
+              );
+            }
+            await db.weightEntry.delete({ where: { id: Number(id) } });
+            return { success: true };
+          },
+          {
+            params: t.Object({
+              id: t.String(),
+            }),
+          },
         ),
   )
   .listen(
@@ -436,9 +556,10 @@ new Elysia()
       // cert: await Bun.file("./certs/selfsigned.crt").text(),
       // key: await Bun.file("./certs/selfsigned.key").text()
     },
-    () => {
+    async () => {
       console.log(
         `Server is running on ${process.env.HOST}:${process.env.PORT}`,
       );
+      launchBot();
     },
   );

@@ -57,13 +57,15 @@ class Auth {
         id,
       },
       select: {
+        id: true,
         username: true,
         profilePic: true,
         gymEntries: {
           select: {
+            id: true,
             date: true,
             points: true,
-            type: true,
+            types: true,
             updatedAt: true,
             notes: true,
             media: {
@@ -79,6 +81,7 @@ class Auth {
         },
         weightEntries: {
           select: {
+            id: true,
             date: true,
             weight: true,
             updatedAt: true,

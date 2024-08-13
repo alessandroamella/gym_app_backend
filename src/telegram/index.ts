@@ -221,7 +221,19 @@ bot.command(
   },
 );
 
-bot.launch();
+export async function launchBot() {
+  try {
+    await bot.launch();
+    console.log('Bot started successfully');
+  } catch (err) {
+    console.error('Error launching bot:', err);
+  }
+}
+
+// listen to errors
+bot.catch((err, ctx) => {
+  console.error(`An error occurred for ${ctx.updateType}`, err);
+});
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
