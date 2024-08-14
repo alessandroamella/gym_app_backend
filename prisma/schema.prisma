@@ -49,7 +49,7 @@ model Media {
   id         Int       @id @default(autoincrement())
   path       String
   type       MediaType
-  gymEntry   GymEntry  @relation(fields: [gymEntryId], references: [id])
+  gymEntry   GymEntry  @relation(fields: [gymEntryId], references: [id], onDelete: Cascade)
   gymEntryId Int
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt

@@ -70,8 +70,8 @@ class Auth {
             notes: true,
             media: {
               select: {
-                type: true,
                 path: true,
+                type: true,
               },
             },
           },

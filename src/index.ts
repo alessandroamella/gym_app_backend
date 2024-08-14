@@ -6,14 +6,12 @@ import moment from 'moment';
 import { auth } from './auth';
 import crypto from 'crypto';
 import { MediaType, Prisma, WorkoutType } from '@prisma/client';
-import randomstring from 'randomstring';
 import { config } from './config';
-import { extname, join, parse } from 'node:path';
+import { join } from 'node:path';
 import { resampleArray } from './helpers/resample';
-import { decode } from 'node-base64-image';
 import { staticPlugin } from '@elysiajs/static';
 import { launchBot } from './telegram';
-import { unlink, exists, readdir } from 'node:fs/promises';
+import { unlink, exists } from 'node:fs/promises';
 import { handleB64Image } from './helpers/imageUtils';
 
 new Elysia()
@@ -210,7 +208,7 @@ new Elysia()
             );
 
             if (profilePic) {
-              profilePic = await handleB64Image(profilePic);
+              profilePic = await handleB64Image(profilePic, 'pp');
             }
             console.debug('Updating user with params', {
               id,
@@ -300,6 +298,7 @@ new Elysia()
                 media: {
                   select: {
                     path: true,
+                    type: true,
                   },
                 },
                 user: {
@@ -360,8 +359,8 @@ new Elysia()
             const files: Prisma.MediaCreateManyGymEntryInput[] = [];
             if (media) {
               for (const b64 of media) {
-                const handled = await handleB64Image(b64);
-                const file = Bun.file(handled);
+                const path = await handleB64Image(b64);
+                const file = Bun.file(path);
                 // use Bun.file to save the file in /uploads
                 // and store the path in the database
 
@@ -373,9 +372,11 @@ new Elysia()
                   : null;
 
                 console.debug(
-                  'Received media file',
+                  'Image path',
                   file.name,
-                  'of type',
+                  'mime',
+                  file.type,
+                  'media type',
                   type,
                 );
 
@@ -388,20 +389,6 @@ new Elysia()
                   );
                 }
 
-                const path =
-                  config.uploadsBasePath +
-                  moment().format('YYYYMMDDHHmmss') +
-                  '_' +
-                  randomstring.generate({
-                    length: 8,
-                    charset: 'alphanumeric',
-                  }) +
-                  extname(file.name!);
-                const fileSize = await Bun.write(path, file);
-
-                console.debug(
-                  `Saved media file "${file.name}" to ${path} with size ${fileSize} bytes`,
-                );
                 files.push({
                   path,
                   type,
@@ -459,10 +446,20 @@ new Elysia()
               );
             }
             for (const media of entry.media.map((e) => e.path)) {
-              console.debug('Deleting media file', media);
-              await unlink(media);
+              if (await exists(media)) {
+                console.debug(
+                  'Deleting media file',
+                  media.replace(
+                    config.uploadsPublicPath,
+                    config.uploadsBasePath,
+                  ),
+                );
+                await unlink(media);
+              } else {
+                console.warn('Media file not found:', media);
+              }
             }
-            await db.gymEntry.delete({ where: { id: Number(id) } });
+            await db.gymEntry.delete({ where: { id: Number(id), userId } });
             return { success: true };
           },
           {
