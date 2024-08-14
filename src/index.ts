@@ -14,6 +14,7 @@ import { decode } from 'node-base64-image';
 import { staticPlugin } from '@elysiajs/static';
 import { launchBot } from './telegram';
 import { unlink, exists, readdir } from 'node:fs/promises';
+import { handleB64Image } from './helpers/imageUtils';
 
 new Elysia()
   .use(staticPlugin({ assets: 'public' }))
@@ -209,27 +210,7 @@ new Elysia()
             );
 
             if (profilePic) {
-              const name =
-                'pp_' +
-                randomstring.generate({
-                  length: 16,
-                  charset: 'alphanumeric',
-                }) +
-                '.png';
-              try {
-                await decode(profilePic, {
-                  ext: 'png',
-                  fname: config.uploadsBasePath + parse(name).name,
-                });
-                profilePic = config.uploadsPublicPath + name;
-              } catch (err) {
-                console.error('Error decoding profile pic:', err);
-                throw new ValidationError(
-                  'user.profile_pic_decoding_error',
-                  t.Object({}),
-                  profilePic,
-                );
-              }
+              profilePic = await handleB64Image(profilePic);
             }
             console.debug('Updating user with params', {
               id,
@@ -378,7 +359,9 @@ new Elysia()
             }
             const files: Prisma.MediaCreateManyGymEntryInput[] = [];
             if (media) {
-              for (const file of media) {
+              for (const b64 of media) {
+                const handled = await handleB64Image(b64);
+                const file = Bun.file(handled);
                 // use Bun.file to save the file in /uploads
                 // and store the path in the database
 
@@ -413,7 +396,7 @@ new Elysia()
                     length: 8,
                     charset: 'alphanumeric',
                   }) +
-                  extname(file.name);
+                  extname(file.name!);
                 const fileSize = await Bun.write(path, file);
 
                 console.debug(
@@ -453,7 +436,7 @@ new Elysia()
               // must contain values in WorkoutType enum
               types: t.Array(t.Enum(WorkoutType), { minItems: 1 }),
               points: t.Integer({ minimum: 1 }),
-              media: t.Optional(t.Files()),
+              media: t.Optional(t.Array(t.String())),
             }),
           },
         )
